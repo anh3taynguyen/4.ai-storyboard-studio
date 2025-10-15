@@ -1,63 +1,70 @@
-
-
 import { GoogleGenAI, Modality } from "@google/genai";
-// Fix: Use GenerateContentParameters instead of the deprecated GenerateContentRequest.
 import type { GenerateContentParameters, Part } from "@google/genai";
 
 let ai: GoogleGenAI | null = null;
 
-export const initializeGemini = (apiKey: string) => {
-    if (apiKey) {
-        try {
-            ai = new GoogleGenAI({ apiKey });
-        } catch (error) {
-            console.error("Failed to initialize GoogleGenAI:", error);
-            ai = null;
-            alert("Không thể khởi tạo Gemini AI. Vui lòng kiểm tra xem khóa API của bạn có hợp lệ không.");
-        }
-    } else {
+export const initializeGemini = (apiKey: string): boolean => {
+    if (!apiKey) {
         ai = null;
+        return false;
+    }
+    try {
+        ai = new GoogleGenAI({ apiKey });
+        return true;
+    } catch (error) {
+        console.error("Failed to initialize GoogleGenAI:", error);
+        ai = null;
+        return false;
     }
 };
+
+export const isApiConfigured = (): boolean => !!ai;
 
 const getMimeType = (dataUrl: string): string => {
   return dataUrl.split(',')[0].split(':')[1].split(';')[0];
 };
 
-// Fix: Removed apiKey parameter. The function now uses the globally configured 'ai' instance.
 export const generateAsset = async (prompt: string): Promise<string | null> => {
-  if (!ai) {
-    alert('Chưa thiết lập Khóa API. Vui lòng thiết lập Khóa API của bạn bằng biểu tượng cài đặt.');
+  if (!isApiConfigured()) {
+    alert('Vui lòng thiết lập khóa API Gemini của bạn trong phần cài đặt.');
     console.error("Gemini AI client not initialized.");
     return null;
   }
   try {
-    const response = await ai.models.generateImages({
-      model: 'imagen-4.0-generate-001',
-      prompt: prompt,
-      config: {
-        numberOfImages: 1,
-        outputMimeType: 'image/jpeg',
-        aspectRatio: '1:1',
-      },
+    const response = await ai!.models.generateContent({
+        model: 'gemini-2.5-flash-image',
+        contents: {
+          parts: [{ text: prompt }],
+        },
+        config: {
+            responseModalities: [Modality.IMAGE],
+        },
     });
-    
-    if (response.generatedImages && response.generatedImages.length > 0) {
-      const base64ImageBytes = response.generatedImages[0].image.imageBytes;
-      return `data:image/jpeg;base64,${base64ImageBytes}`;
+
+    const firstCandidate = response.candidates?.[0];
+    if (firstCandidate?.content?.parts) {
+      for (const part of firstCandidate.content.parts) {
+        if (part.inlineData) {
+          return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+        }
+      }
     }
     return null;
-  } catch (error) {
+  } catch (error)
+{
     console.error("Error generating asset:", error);
-    alert(`Đã xảy ra lỗi khi tạo tài sản: ${error.message}`);
+    if (error instanceof Error) {
+        alert(`Đã xảy ra lỗi khi tạo tài sản: ${error.message}`);
+    } else {
+        alert(`Đã xảy ra lỗi không xác định khi tạo tài sản.`);
+    }
     return null;
   }
 };
 
-// Fix: Removed apiKey parameter. The function now uses the globally configured 'ai' instance.
 export const composeOrEditScene = async (parts: (string | Part)[]): Promise<string | null> => {
-  if (!ai) {
-    alert('Chưa thiết lập Khóa API. Vui lòng thiết lập Khóa API của bạn bằng biểu tượng cài đặt.');
+  if (!isApiConfigured()) {
+    alert('Vui lòng thiết lập khóa API Gemini của bạn trong phần cài đặt.');
     console.error("Gemini AI client not initialized.");
     return null;
   }
@@ -69,7 +76,6 @@ export const composeOrEditScene = async (parts: (string | Part)[]): Promise<stri
         return part;
     });
 
-    // Fix: Use GenerateContentParameters instead of the deprecated GenerateContentRequest.
     const request: GenerateContentParameters = {
       model: 'gemini-2.5-flash-image',
       contents: {
@@ -80,17 +86,24 @@ export const composeOrEditScene = async (parts: (string | Part)[]): Promise<stri
       },
     };
 
-    const response = await ai.models.generateContent(request);
-
-    for (const part of response.candidates[0].content.parts) {
-      if (part.inlineData) {
-        return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+    const response = await ai!.models.generateContent(request);
+    
+    const firstCandidate = response.candidates?.[0];
+    if (firstCandidate?.content?.parts) {
+      for (const part of firstCandidate.content.parts) {
+        if (part.inlineData) {
+          return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+        }
       }
     }
     return null;
   } catch (error) {
     console.error("Error composing scene:", error);
-    alert(`Đã xảy ra lỗi khi dựng cảnh: ${error.message}`);
+    if (error instanceof Error) {
+        alert(`Đã xảy ra lỗi khi dựng cảnh: ${error.message}`);
+    } else {
+        alert(`Đã xảy ra lỗi không xác định khi dựng cảnh.`);
+    }
     return null;
   }
 };

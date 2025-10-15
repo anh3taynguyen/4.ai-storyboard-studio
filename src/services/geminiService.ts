@@ -1,16 +1,32 @@
-
 import { GoogleGenAI, Modality } from "@google/genai";
 import type { GenerateContentParameters, Part } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const API_KEY = process.env.API_KEY;
+
+let ai: GoogleGenAI | null = null;
+if (API_KEY) {
+    try {
+        ai = new GoogleGenAI({ apiKey: API_KEY });
+    } catch (error) {
+        console.error("Failed to initialize GoogleGenAI:", error);
+        ai = null;
+    }
+}
+
+export const isApiConfigured = !!ai;
 
 const getMimeType = (dataUrl: string): string => {
   return dataUrl.split(',')[0].split(':')[1].split(';')[0];
 };
 
 export const generateAsset = async (prompt: string): Promise<string | null> => {
+  if (!isApiConfigured) {
+    alert('Khóa API Gemini chưa được định cấu hình. Vui lòng thiết lập biến môi trường API_KEY.');
+    console.error("Gemini AI client not initialized. API_KEY is missing or invalid.");
+    return null;
+  }
   try {
-    const response = await ai.models.generateContent({
+    const response = await ai!.models.generateContent({
         model: 'gemini-2.5-flash-image',
         contents: {
           parts: [{ text: prompt }],
@@ -28,7 +44,6 @@ export const generateAsset = async (prompt: string): Promise<string | null> => {
         }
       }
     }
-    console.warn("No image data found in Gemini response for asset generation.");
     return null;
   } catch (error) {
     console.error("Error generating asset:", error);
@@ -42,6 +57,11 @@ export const generateAsset = async (prompt: string): Promise<string | null> => {
 };
 
 export const composeOrEditScene = async (parts: (string | Part)[]): Promise<string | null> => {
+  if (!isApiConfigured) {
+    alert('Khóa API Gemini chưa được định cấu hình. Vui lòng thiết lập biến môi trường API_KEY.');
+    console.error("Gemini AI client not initialized. API_KEY is missing or invalid.");
+    return null;
+  }
   try {
     const processedParts: Part[] = parts.map(part => {
         if (typeof part === 'string') {
@@ -60,7 +80,7 @@ export const composeOrEditScene = async (parts: (string | Part)[]): Promise<stri
       },
     };
 
-    const response = await ai.models.generateContent(request);
+    const response = await ai!.models.generateContent(request);
     
     const firstCandidate = response.candidates?.[0];
     if (firstCandidate?.content?.parts) {
@@ -70,7 +90,6 @@ export const composeOrEditScene = async (parts: (string | Part)[]): Promise<stri
         }
       }
     }
-    console.warn("No image data found in Gemini response for scene composition.");
     return null;
   } catch (error) {
     console.error("Error composing scene:", error);

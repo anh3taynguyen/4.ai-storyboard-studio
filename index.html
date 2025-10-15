@@ -5,91 +5,24 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AI Storyboard Studio</title>
-    <script async src="https://unpkg.com/es-module-shims@1.10.0/dist/es-module-shims.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script type="importmap">
+  <script type="importmap">
 {
   "imports": {
-    "react": "https://esm.sh/react@18.3.1",
-    "react/": "https://esm.sh/react@18.3.1/",
-    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
-    "react-dom/": "https://esm.sh/react-dom@18.3.1/",
-    "@google/genai": "https://esm.sh/@google/genai@0.14.0",
-    "vite": "https://aistudiocdn.com/vite@^7.1.10",
-    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.0.4"
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.24.0",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.0.4",
+    "vite": "https://aistudiocdn.com/vite@^7.1.10"
   }
 }
 </script>
-    <style>
-      .btn-primary {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        padding: 0.75rem 1.5rem;
-        font-weight: 600;
-        border-radius: 0.375rem;
-        background-color: #3b82f6;
-        color: white;
-        transition: background-color 0.2s;
-        border: 1px solid transparent;
-      }
-      .btn-primary:hover {
-        background-color: #2563eb;
-      }
-      .btn-primary:disabled {
-        background-color: #4b5563;
-        cursor: not-allowed;
-        opacity: 0.7;
-      }
-      .btn-secondary {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        padding: 0.5rem 1rem;
-        font-weight: 600;
-        border-radius: 0.375rem;
-        background-color: #4b5563;
-        color: white;
-        transition: background-color 0.2s;
-        border: 1px solid #6b7280;
-      }
-      .btn-secondary:hover {
-        background-color: #6b7280;
-      }
-    </style>
-  </head>
+<link rel="stylesheet" href="/index.css">
+</head>
   <body class="bg-gray-900 text-white">
     <div id="root"></div>
-    <script type="module">
-      try {
-        const response = await fetch('/index.tsx');
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const source = await response.text();
-        
-        const { code } = Babel.transform(source, {
-          presets: ["react", "typescript"],
-          filename: 'index.tsx',
-        });
-
-        const blob = new Blob([code], { type: 'text/javascript' });
-        const url = URL.createObjectURL(blob);
-        await import(url);
-        URL.revokeObjectURL(url); // Clean up the blob URL
-
-      } catch (error) {
-        console.error('Error loading or transpiling the application:', error);
-        const root = document.getElementById('root');
-        if (root) {
-            root.innerHTML = `<div style="padding: 2rem; color: #f87171; font-family: sans-serif;">
-                <h2 style="font-size: 1.5rem; font-weight: bold;">Application Failed to Load</h2>
-                <p style="margin-top: 0.5rem;">There was an error during the loading process. Please check the console for more details.</p>
-                <pre style="background-color: #1f2937; padding: 1rem; border-radius: 0.5rem; margin-top: 1rem; color: #f9fafb; white-space: pre-wrap; word-break: break-all;">${error.message}</pre>
-            </div>`;
-        }
-      }
-    </script>
-  </body>
+    <script type="module" src="/src/index.tsx"></script>
+  <script type="module" src="/index.tsx"></script>
+</body>
 </html>

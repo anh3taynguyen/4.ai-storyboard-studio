@@ -1,10 +1,9 @@
 
-
 import React, { useState, useCallback, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import type { Asset, Product, ResultScene, AssetCreationForm } from './types';
 import { AssetType, SceneCreatorMode } from './types';
 import useLocalStorage from './hooks/useLocalStorage';
-import { generateAsset, composeOrEditScene, imageToPart } from './services/geminiService';
+import { generateAsset, composeOrEditScene, imageToPart, isApiConfigured } from './services/geminiService';
 import { MagicIcon, SaveIcon, FolderOpenIcon, FilePlusIcon, RefreshIcon, EyeIcon, DownloadIcon, TrashIcon, PlayIcon } from './components/Icons';
 import { FullScreenSpinner } from './components/Spinner';
 import Card from './components/Card';
@@ -106,7 +105,7 @@ export interface StoryboardEditorHandle {
     newProject: () => void;
 }
 
-const StoryboardEditor = forwardRef<StoryboardEditorHandle, {}>(({}, ref) => {
+const StoryboardEditor = forwardRef<StoryboardEditorHandle>((props, ref) => {
     const [assets, setAssets] = useLocalStorage<Asset[]>(`sb-assets`, []);
     const [products, setProducts] = useLocalStorage<Product[]>(`sb-products`, []);
     const [results, setResults] = useLocalStorage<ResultScene[]>(`sb-results`, []);
@@ -348,9 +347,9 @@ const StoryboardEditor = forwardRef<StoryboardEditorHandle, {}>(({}, ref) => {
                     value={prompt}
                     onChange={e => setPrompt(e.target.value)}
                     className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 h-24 text-sm"
-                    disabled={sceneCreatorMode === SceneCreatorMode.IDLE || isLoading}
+                    disabled={sceneCreatorMode === SceneCreatorMode.IDLE || !isApiConfigured}
                 />
-                <button onClick={() => handleGenerateScene(prompt)} disabled={!canCreate || isLoading} className="btn-primary w-full">
+                <button onClick={() => handleGenerateScene(prompt)} disabled={!canCreate || isLoading || !isApiConfigured} className="btn-primary w-full">
                     <MagicIcon /> {getButtonText()}
                 </button>
             </div>
@@ -410,7 +409,7 @@ const StoryboardEditor = forwardRef<StoryboardEditorHandle, {}>(({}, ref) => {
             
             <div className="container mx-auto p-4 grid grid-cols-1 lg:grid-cols-12 gap-6 relative">
                  <aside className="lg:col-span-3 flex flex-col space-y-6">
-                    <CreativeStudio onCreate={handleCreateAsset} disabled={isLoading} />
+                    <CreativeStudio onCreate={handleCreateAsset} disabled={isLoading || !isApiConfigured} />
                     <SceneCreator />
                 </aside>
 
@@ -563,6 +562,43 @@ const App: React.FC = () => {
     
   return (
     <div className="min-h-screen bg-gray-900 text-white font-sans">
+        <style>{`
+          .btn-primary {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.75rem 1.5rem;
+            font-weight: 600;
+            border-radius: 0.375rem;
+            background-color: #3b82f6;
+            color: white;
+            transition: background-color 0.2s;
+            border: 1px solid transparent;
+          }
+          .btn-primary:hover {
+            background-color: #2563eb;
+          }
+          .btn-primary:disabled {
+            background-color: #4b5563;
+            cursor: not-allowed;
+            opacity: 0.7;
+          }
+          .btn-secondary {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.5rem 1rem;
+            font-weight: 600;
+            border-radius: 0.375rem;
+            background-color: #4b5563;
+            color: white;
+            transition: background-color 0.2s;
+            border: 1px solid #6b7280;
+          }
+          .btn-secondary:hover {
+            background-color: #6b7280;
+          }
+        `}</style>
         <header className="bg-gray-800/50 backdrop-blur-sm p-4 fixed top-0 left-0 right-0 z-40 border-b border-gray-700">
             <div className="container mx-auto flex justify-between items-center">
                 <h1 className="text-2xl font-bold tracking-wider">AI Storyboard Studio</h1>
@@ -576,7 +612,15 @@ const App: React.FC = () => {
             </div>
         </header>
 
-        <main className="pt-20">
+        <main className="pt-24">
+            {!isApiConfigured && (
+                 <div className="container mx-auto px-4 pb-4 text-center">
+                    <div className="bg-yellow-800 border border-yellow-600 text-yellow-100 px-4 py-3 rounded-lg relative" role="alert">
+                        <strong className="font-bold">Cảnh báo Cấu hình: </strong>
+                        <span className="block sm:inline">Khóa API Gemini chưa được thiết lập. Các tính năng AI sẽ bị vô hiệu hóa.</span>
+                    </div>
+                </div>
+            )}
             <StoryboardEditor ref={storyboardActionsRef} />
         </main>
     </div>
