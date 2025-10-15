@@ -1,36 +1,14 @@
 
 import { GoogleGenAI, Modality } from "@google/genai";
-// Fix: Use GenerateContentParameters instead of the deprecated GenerateContentRequest.
 import type { GenerateContentParameters, Part } from "@google/genai";
 
-let ai: GoogleGenAI | null = null;
-
-export const initializeGemini = (apiKey: string) => {
-    if (apiKey) {
-        try {
-            ai = new GoogleGenAI({ apiKey });
-        } catch (error) {
-            console.error("Failed to initialize GoogleGenAI:", error);
-            ai = null;
-            alert("Không thể khởi tạo Gemini AI. Vui lòng kiểm tra xem khóa API của bạn có hợp lệ không.");
-        }
-    } else {
-        ai = null;
-    }
-};
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const getMimeType = (dataUrl: string): string => {
   return dataUrl.split(',')[0].split(':')[1].split(';')[0];
 };
 
-// Fix: Switched from `generateImages` with `imagen-4.0-generate-001` to `generateContent` with `gemini-2.5-flash-image`
-// to support free-tier API keys and avoid the "billed users only" error.
 export const generateAsset = async (prompt: string): Promise<string | null> => {
-  if (!ai) {
-    alert('Chưa thiết lập Khóa API. Vui lòng thiết lập Khóa API của bạn bằng biểu tượng cài đặt.');
-    console.error("Gemini AI client not initialized.");
-    return null;
-  }
   try {
     const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash-image',
@@ -63,13 +41,7 @@ export const generateAsset = async (prompt: string): Promise<string | null> => {
   }
 };
 
-// Fix: Removed apiKey parameter. The function now uses the globally configured 'ai' instance.
 export const composeOrEditScene = async (parts: (string | Part)[]): Promise<string | null> => {
-  if (!ai) {
-    alert('Chưa thiết lập Khóa API. Vui lòng thiết lập Khóa API của bạn bằng biểu tượng cài đặt.');
-    console.error("Gemini AI client not initialized.");
-    return null;
-  }
   try {
     const processedParts: Part[] = parts.map(part => {
         if (typeof part === 'string') {
@@ -78,14 +50,12 @@ export const composeOrEditScene = async (parts: (string | Part)[]): Promise<stri
         return part;
     });
 
-    // Fix: Use GenerateContentParameters instead of the deprecated GenerateContentRequest.
     const request: GenerateContentParameters = {
       model: 'gemini-2.5-flash-image',
       contents: {
         parts: processedParts,
       },
       config: {
-        // Fix: responseModalities must be an array with a single `Modality.IMAGE` element for image editing.
         responseModalities: [Modality.IMAGE],
       },
     };

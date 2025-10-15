@@ -1,11 +1,11 @@
 
+
 import React, { useState, useCallback, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
-// Fix: Corrected typo from AssetCreationform to AssetCreationForm.
 import type { Asset, Product, ResultScene, AssetCreationForm } from './types';
 import { AssetType, SceneCreatorMode } from './types';
 import useLocalStorage from './hooks/useLocalStorage';
-import { generateAsset, composeOrEditScene, imageToPart, initializeGemini } from './services/geminiService';
-import { MagicIcon, SaveIcon, FolderOpenIcon, FilePlusIcon, RefreshIcon, EyeIcon, DownloadIcon, TrashIcon, PlayIcon, SettingsIcon } from './components/Icons';
+import { generateAsset, composeOrEditScene, imageToPart } from './services/geminiService';
+import { MagicIcon, SaveIcon, FolderOpenIcon, FilePlusIcon, RefreshIcon, EyeIcon, DownloadIcon, TrashIcon, PlayIcon } from './components/Icons';
 import { FullScreenSpinner } from './components/Spinner';
 import Card from './components/Card';
 import Modal from './components/Modal';
@@ -106,7 +106,7 @@ export interface StoryboardEditorHandle {
     newProject: () => void;
 }
 
-const StoryboardEditor = forwardRef<StoryboardEditorHandle, { apiKey: string }>(({ apiKey }, ref) => {
+const StoryboardEditor = forwardRef<StoryboardEditorHandle, {}>(({}, ref) => {
     const [assets, setAssets] = useLocalStorage<Asset[]>(`sb-assets`, []);
     const [products, setProducts] = useLocalStorage<Product[]>(`sb-products`, []);
     const [results, setResults] = useLocalStorage<ResultScene[]>(`sb-results`, []);
@@ -348,9 +348,9 @@ const StoryboardEditor = forwardRef<StoryboardEditorHandle, { apiKey: string }>(
                     value={prompt}
                     onChange={e => setPrompt(e.target.value)}
                     className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 h-24 text-sm"
-                    disabled={sceneCreatorMode === SceneCreatorMode.IDLE || !apiKey}
+                    disabled={sceneCreatorMode === SceneCreatorMode.IDLE || isLoading}
                 />
-                <button onClick={() => handleGenerateScene(prompt)} disabled={!canCreate || isLoading || !apiKey} className="btn-primary w-full">
+                <button onClick={() => handleGenerateScene(prompt)} disabled={!canCreate || isLoading} className="btn-primary w-full">
                     <MagicIcon /> {getButtonText()}
                 </button>
             </div>
@@ -410,7 +410,7 @@ const StoryboardEditor = forwardRef<StoryboardEditorHandle, { apiKey: string }>(
             
             <div className="container mx-auto p-4 grid grid-cols-1 lg:grid-cols-12 gap-6 relative">
                  <aside className="lg:col-span-3 flex flex-col space-y-6">
-                    <CreativeStudio onCreate={handleCreateAsset} disabled={isLoading || !apiKey} />
+                    <CreativeStudio onCreate={handleCreateAsset} disabled={isLoading} />
                     <SceneCreator />
                 </aside>
 
@@ -557,108 +557,12 @@ const ProjectManagementMenu: React.FC<{
     );
 };
 
-const ApiKeyModal: React.FC<{
-    isOpen: boolean;
-    onClose: () => void;
-    onSave: (key: string) => void;
-    currentKey: string;
-}> = ({ isOpen, onClose, onSave, currentKey }) => {
-    const [key, setKey] = useState(currentKey);
-
-    useEffect(() => {
-        setKey(currentKey);
-    }, [currentKey, isOpen]);
-
-    const handleSave = () => {
-        onSave(key);
-        onClose();
-    };
-
-    return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Thiết Lập Khóa API Gemini">
-            <div className="flex flex-col space-y-4">
-                <p className="text-gray-400 text-sm">
-                    Bạn có thể lấy khóa API từ Google AI Studio. Khóa được lưu trong bộ nhớ cục bộ của trình duyệt và không được chia sẻ với bất kỳ ai.
-                </p>
-                <input
-                    type="password"
-                    placeholder="Nhập Khóa API của bạn"
-                    value={key}
-                    onChange={(e) => setKey(e.target.value)}
-                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm"
-                />
-                <div className="flex justify-end space-x-2">
-                    <button onClick={onClose} className="btn-secondary">Hủy</button>
-                    <button onClick={handleSave} disabled={!key} className="btn-primary">Lưu Khóa</button>
-                </div>
-            </div>
-        </Modal>
-    );
-};
-
-
 // Main App
 const App: React.FC = () => {
     const storyboardActionsRef = useRef<StoryboardEditorHandle>(null);
-    const [apiKey, setApiKey] = useLocalStorage<string>('gemini-api-key', '');
-    const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
-
-    useEffect(() => {
-        initializeGemini(apiKey);
-    }, [apiKey]);
-
-    useEffect(() => {
-        // On initial load, if there's no API key, open the modal.
-        if (!apiKey) {
-            setIsApiKeyModalOpen(true);
-        }
-    }, []); // Empty dependency array ensures this runs only once on mount.
     
   return (
     <div className="min-h-screen bg-gray-900 text-white font-sans">
-        <style>{`
-          .btn-primary {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0.75rem 1.5rem;
-            font-weight: 600;
-            border-radius: 0.375rem;
-            background-color: #3b82f6;
-            color: white;
-            transition: background-color 0.2s;
-            border: 1px solid transparent;
-          }
-          .btn-primary:hover {
-            background-color: #2563eb;
-          }
-          .btn-primary:disabled {
-            background-color: #4b5563;
-            cursor: not-allowed;
-            opacity: 0.7;
-          }
-          .btn-secondary {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0.5rem 1rem;
-            font-weight: 600;
-            border-radius: 0.375rem;
-            background-color: #4b5563;
-            color: white;
-            transition: background-color 0.2s;
-            border: 1px solid #6b7280;
-          }
-          .btn-secondary:hover {
-            background-color: #6b7280;
-          }
-        `}</style>
-        <ApiKeyModal
-            isOpen={isApiKeyModalOpen}
-            onClose={() => setIsApiKeyModalOpen(false)}
-            onSave={setApiKey}
-            currentKey={apiKey}
-        />
         <header className="bg-gray-800/50 backdrop-blur-sm p-4 fixed top-0 left-0 right-0 z-40 border-b border-gray-700">
             <div className="container mx-auto flex justify-between items-center">
                 <h1 className="text-2xl font-bold tracking-wider">AI Storyboard Studio</h1>
@@ -668,15 +572,12 @@ const App: React.FC = () => {
                         onOpen={() => storyboardActionsRef.current?.openProject()}
                         onNew={() => storyboardActionsRef.current?.newProject()}
                     />
-                    <button onClick={() => setIsApiKeyModalOpen(true)} className="p-2 rounded-md hover:bg-gray-700 transition-colors" title="Cài đặt">
-                        <SettingsIcon />
-                    </button>
                 </div>
             </div>
         </header>
 
         <main className="pt-20">
-            <StoryboardEditor ref={storyboardActionsRef} apiKey={apiKey} />
+            <StoryboardEditor ref={storyboardActionsRef} />
         </main>
     </div>
   );

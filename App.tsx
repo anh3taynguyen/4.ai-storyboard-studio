@@ -1,16 +1,363 @@
 
-
 import React, { useState, useCallback, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
-// Fix: Corrected typo from AssetCreationform to AssetCreationForm.
-import type { Asset, Product, ResultScene, AssetCreationForm } from './types';
-import { AssetType, SceneCreatorMode } from './types';
-import useLocalStorage from './hooks/useLocalStorage';
-import { generateAsset, composeOrEditScene, imageToPart, initializeGemini } from './services/geminiService';
-import { MagicIcon, SaveIcon, FolderOpenIcon, FilePlusIcon, RefreshIcon, EyeIcon, DownloadIcon, TrashIcon, PlayIcon, SettingsIcon } from './components/Icons';
-import { FullScreenSpinner } from './components/Spinner';
-import Card from './components/Card';
-import Modal from './components/Modal';
-import type { Part } from '@google/genai';
+import { GoogleGenAI, Modality } from "@google/genai";
+import type { GenerateContentParameters, Part } from '@google/genai';
+
+// ==================================================================================
+// START: Bundled content from types.ts
+// ==================================================================================
+interface Asset {
+  id: string;
+  src: string; // base64 data URL
+  prompt?: string;
+  type: 'ai' | 'upload';
+}
+
+interface Product {
+  id: string;
+  src: string; // base64 data URL
+}
+
+interface ResultScene {
+  id: string;
+  src: string; // base64 data URL
+}
+
+enum AssetType {
+  CHARACTER = 'Người',
+  ANIMAL = 'Động vật',
+  SCENE = 'Cảnh vật',
+  GAME_CHARACTER = 'Nhân vật Game',
+  ANIME_CHARACTER = 'Nhân vật Anime',
+  THREE_D_CHARACTER = 'Nhân vật Hoạt hình 3D',
+}
+
+enum SceneCreatorMode {
+  IDLE = 'IDLE',
+  NEW = 'NEW',
+  PRODUCT_AD = 'PRODUCT_AD',
+  FROM_RESULT = 'FROM_RESULT',
+  FROM_CHARACTER = 'FROM_CHARACTER',
+}
+
+interface AssetCreationForm {
+  assetType: AssetType;
+  description: string;
+  race: string;
+  gender: string;
+}
+// ==================================================================================
+// END: Bundled content from types.ts
+// ==================================================================================
+
+
+// ==================================================================================
+// START: Bundled content from hooks/useLocalStorage.ts
+// ==================================================================================
+function useLocalStorage<T,>(key: string, initialValue: T): [T, React.Dispatch<React.SetStateAction<T>>] {
+  const [storedValue, setStoredValue] = useState<T>(() => {
+    try {
+      const item = window.localStorage.getItem(key);
+      return item ? JSON.parse(item) : initialValue;
+    } catch (error) {
+      console.error(error);
+      return initialValue;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      const valueToStore = JSON.stringify(storedValue);
+      window.localStorage.setItem(key, valueToStore);
+    } catch (error) {
+      console.error(error);
+    }
+  }, [key, storedValue]);
+
+  return [storedValue, setStoredValue];
+}
+// ==================================================================================
+// END: Bundled content from hooks/useLocalStorage.ts
+// ==================================================================================
+
+
+// ==================================================================================
+// START: Bundled content from services/geminiService.ts
+// ==================================================================================
+let ai: GoogleGenAI | null = null;
+
+const initializeGemini = (apiKey: string) => {
+    if (apiKey) {
+        try {
+            ai = new GoogleGenAI({ apiKey });
+        } catch (error) {
+            console.error("Failed to initialize GoogleGenAI:", error);
+            ai = null;
+            alert("Không thể khởi tạo Gemini AI. Vui lòng kiểm tra xem khóa API của bạn có hợp lệ không.");
+        }
+    } else {
+        ai = null;
+    }
+};
+
+const getMimeType = (dataUrl: string): string => {
+  return dataUrl.split(',')[0].split(':')[1].split(';')[0];
+};
+
+const generateAsset = async (prompt: string): Promise<string | null> => {
+  if (!ai) {
+    alert('Chưa thiết lập Khóa API. Vui lòng thiết lập Khóa API của bạn bằng biểu tượng cài đặt.');
+    console.error("Gemini AI client not initialized.");
+    return null;
+  }
+  try {
+    const response = await ai.models.generateImages({
+      model: 'imagen-4.0-generate-001',
+      prompt: prompt,
+      config: {
+        numberOfImages: 1,
+        outputMimeType: 'image/jpeg',
+        aspectRatio: '1:1',
+      },
+    });
+    
+    if (response.generatedImages && response.generatedImages.length > 0) {
+      const base64ImageBytes = response.generatedImages[0].image.imageBytes;
+      return `data:image/jpeg;base64,${base64ImageBytes}`;
+    }
+    return null;
+  } catch (error) {
+    console.error("Error generating asset:", error);
+    alert(`Đã xảy ra lỗi khi tạo tài sản: ${error.message}`);
+    return null;
+  }
+};
+
+const composeOrEditScene = async (parts: (string | Part)[]): Promise<string | null> => {
+  if (!ai) {
+    alert('Chưa thiết lập Khóa API. Vui lòng thiết lập Khóa API của bạn bằng biểu tượng cài đặt.');
+    console.error("Gemini AI client not initialized.");
+    return null;
+  }
+  try {
+    const processedParts: Part[] = parts.map(part => {
+        if (typeof part === 'string') {
+            return { text: part };
+        }
+        return part;
+    });
+
+    const request: GenerateContentParameters = {
+      model: 'gemini-2.5-flash-image',
+      contents: {
+        parts: processedParts,
+      },
+      config: {
+        responseModalities: [Modality.IMAGE],
+      },
+    };
+
+    const response = await ai.models.generateContent(request);
+
+    for (const part of response.candidates[0].content.parts) {
+      if (part.inlineData) {
+        return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+      }
+    }
+    return null;
+  } catch (error) {
+    console.error("Error composing scene:", error);
+    alert(`Đã xảy ra lỗi khi dựng cảnh: ${error.message}`);
+    return null;
+  }
+};
+
+const imageToPart = async (src: string): Promise<Part> => {
+    return {
+        inlineData: {
+            data: src.split(',')[1],
+            mimeType: getMimeType(src)
+        }
+    };
+};
+// ==================================================================================
+// END: Bundled content from services/geminiService.ts
+// ==================================================================================
+
+
+// ==================================================================================
+// START: Bundled content from components/Icons.tsx
+// ==================================================================================
+const PlusIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+    </svg>
+);
+const UploadIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+    </svg>
+);
+const TrashIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+    </svg>
+);
+const DownloadIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+    </svg>
+);
+const EyeIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+    </svg>
+);
+const RefreshIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h5M20 20v-5h-5M4 4l1.5 1.5A9 9 0 0120 12M20 20l-1.5-1.5A9 9 0 004 12" />
+    </svg>
+);
+const PlayIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+);
+const MagicIcon = () => (
+     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+    </svg>
+);
+const SaveIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+    </svg>
+  );
+const FolderOpenIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
+    </svg>
+  );
+const FilePlusIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+    </svg>
+  );
+const SettingsIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
+);
+// ==================================================================================
+// END: Bundled content from components/Icons.tsx
+// ==================================================================================
+
+
+// ==================================================================================
+// START: Bundled content from components/Spinner.tsx
+// ==================================================================================
+const FullScreenSpinner: React.FC<{ message: string }> = ({ message }) => (
+    <div className="fixed inset-0 bg-gray-900 bg-opacity-80 flex flex-col justify-center items-center z-50">
+        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
+        <p className="mt-4 text-lg text-white font-semibold">{message}</p>
+    </div>
+);
+// ==================================================================================
+// END: Bundled content from components/Spinner.tsx
+// ==================================================================================
+
+
+// ==================================================================================
+// START: Bundled content from components/Modal.tsx
+// ==================================================================================
+interface ModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  title: string;
+  children: React.ReactNode;
+}
+const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center z-50" onClick={onClose}>
+      <div className="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4 relative" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-xl font-bold text-white">{title}</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-white">&times;</button>
+        </div>
+        <div>{children}</div>
+      </div>
+    </div>
+  );
+};
+// ==================================================================================
+// END: Bundled content from components/Modal.tsx
+// ==================================================================================
+
+
+// ==================================================================================
+// START: Bundled content from components/Card.tsx
+// ==================================================================================
+interface CardAction {
+  icon: React.ReactNode;
+  onClick: () => void;
+  label: string;
+}
+interface CardProps {
+  src: string;
+  isSelected: boolean;
+  onSelect: () => void;
+  actions: CardAction[];
+  children?: React.ReactNode;
+  draggable?: boolean;
+  onDragStart?: (e: React.DragEvent<HTMLDivElement>) => void;
+  onDragOver?: (e: React.DragEvent<HTMLDivElement>) => void;
+  onDrop?: (e: React.DragEvent<HTMLDivElement>) => void;
+  onDragEnter?: (e: React.DragEvent<HTMLDivElement>) => void;
+  onDragEnd?: (e: React.DragEvent<HTMLDivElement>) => void;
+}
+const Card: React.FC<CardProps> = ({ src, isSelected, onSelect, actions, children, draggable, onDragStart, onDragOver, onDrop, onDragEnter, onDragEnd }) => {
+  return (
+    <div
+      className={`relative group border-2 rounded-lg overflow-hidden transition-all duration-200 ${isSelected ? 'border-blue-500 shadow-lg' : 'border-gray-700 hover:border-gray-500'}`}
+      onClick={onSelect}
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onDragEnter={onDragEnter}
+      onDragEnd={onDragEnd}
+    >
+      <img src={src} alt="card content" className="w-full h-full object-cover aspect-square" />
+      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all duration-300 flex justify-center items-center">
+        <div className="absolute top-2 right-2 flex flex-col space-y-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+          {actions.map((action, index) => (
+            <button
+              key={index}
+              onClick={(e) => {
+                e.stopPropagation();
+                action.onClick();
+              }}
+              className="p-1.5 bg-gray-800 bg-opacity-70 rounded-full text-white hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              title={action.label}
+            >
+              {action.icon}
+            </button>
+          ))}
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+};
+// ==================================================================================
+// END: Bundled content from components/Card.tsx
+// ==================================================================================
+
 
 // Helper for file uploads
 const fileToBase64 = (file: File): Promise<string> =>
