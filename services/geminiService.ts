@@ -76,7 +76,7 @@ export const composeOrEditScene = async (parts: (string | Part)[]): Promise<stri
         parts: processedParts,
       },
       config: {
-        responseModalities: [Modality.IMAGE, Modality.TEXT],
+        responseModalities: [Modality.IMAGE],
       },
     };
 
