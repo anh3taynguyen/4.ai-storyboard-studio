@@ -58,11 +58,38 @@
         background-color: #6b7280;
       }
     </style>
-  <link rel="stylesheet" href="/index.css">
-</head>
+  </head>
   <body class="bg-gray-900 text-white">
     <div id="root"></div>
-    <script type="text/babel" data-presets="react,typescript" src="/index.tsx" data-type="module"></script>
-  <script type="module" src="/index.tsx"></script>
-</body>
+    <script type="module">
+      try {
+        const response = await fetch('/index.tsx');
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const source = await response.text();
+        
+        const { code } = Babel.transform(source, {
+          presets: ["react", "typescript"],
+          filename: 'index.tsx',
+        });
+
+        const blob = new Blob([code], { type: 'text/javascript' });
+        const url = URL.createObjectURL(blob);
+        await import(url);
+        URL.revokeObjectURL(url); // Clean up the blob URL
+
+      } catch (error) {
+        console.error('Error loading or transpiling the application:', error);
+        const root = document.getElementById('root');
+        if (root) {
+            root.innerHTML = `<div style="padding: 2rem; color: #f87171; font-family: sans-serif;">
+                <h2 style="font-size: 1.5rem; font-weight: bold;">Application Failed to Load</h2>
+                <p style="margin-top: 0.5rem;">There was an error during the loading process. Please check the console for more details.</p>
+                <pre style="background-color: #1f2937; padding: 1rem; border-radius: 0.5rem; margin-top: 1rem; color: #f9fafb; white-space: pre-wrap; word-break: break-all;">${error.message}</pre>
+            </div>`;
+        }
+      }
+    </script>
+  </body>
 </html>
